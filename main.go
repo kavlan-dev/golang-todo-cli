@@ -82,6 +82,25 @@ func listTasks(t1 *TodoList) {
 	}
 }
 
+func parseTaskId(strId string) (int, bool) {
+	id, err := strconv.Atoi(strId)
+	if err != nil {
+		logger.Println("Не верный id")
+		fmt.Println("Ошибка: не верный id")
+		return 0, false
+	}
+	return id, true
+}
+
+func findTaskIndex(t1 *TodoList, id int) int {
+	for i := range t1.Tasks {
+		if t1.Tasks[i].Id == id {
+			return i
+		}
+	}
+	return -1
+}
+
 func addTask(t1 *TodoList, content string) {
 	task := Task{
 		Id:      t1.NextId,
@@ -96,53 +115,43 @@ func addTask(t1 *TodoList, content string) {
 }
 
 func toggleTask(t1 *TodoList, strId string) {
-	id, err := strconv.Atoi(strId)
-	if err != nil {
-		logger.Println("Не верный id")
-
-		fmt.Println("Ошибка: не верный id")
+	id, ok := parseTaskId(strId)
+	if !ok {
 		return
 	}
 
-	for i := range t1.Tasks {
-		if t1.Tasks[i].Id == id {
-			t1.Tasks[i].Done = !t1.Tasks[i].Done
-			status := "выполнено"
-			if !t1.Tasks[i].Done {
-				status = "не выполнено"
-			}
-			logger.Printf("Задача #%d отмечена как %s\n", id, status)
-
-			fmt.Printf("Задача #%d отмечена как %s\n", id, status)
-			return
-		}
+	index := findTaskIndex(t1, id)
+	if index == -1 {
+		logger.Printf("Задача #%d не найдена\n", id)
+		fmt.Println("Задача не найдена")
+		return
 	}
-	logger.Printf("Задача #%d не найдена\n", id)
 
-	fmt.Println("Задача не найдена")
+	t1.Tasks[index].Done = !t1.Tasks[index].Done
+	status := "выполнено"
+	if !t1.Tasks[index].Done {
+		status = "не выполнено"
+	}
+	logger.Printf("Задача #%d отмечена как %s\n", id, status)
+	fmt.Printf("Задача #%d отмечена как %s\n", id, status)
 }
 
 func deleteTask(t1 *TodoList, strId string) {
-	id, err := strconv.Atoi(strId)
-	if err != nil {
-		logger.Println("Не верный id")
-
-		fmt.Println("Ошибка: не верный id")
+	id, ok := parseTaskId(strId)
+	if !ok {
 		return
 	}
 
-	for i := range t1.Tasks {
-		if t1.Tasks[i].Id == id {
-			logger.Printf("Задача #%d была удалена\n", id)
-
-			t1.Tasks = append(t1.Tasks[:i], t1.Tasks[i+1:]...)
-			fmt.Printf("Задача #%d была удалена\n", id)
-			return
-		}
+	index := findTaskIndex(t1, id)
+	if index == -1 {
+		logger.Printf("Задача #%d не найдена\n", id)
+		fmt.Println("Задача не найдена")
+		return
 	}
-	logger.Printf("Задача #%d не найдена\n", id)
 
-	fmt.Println("Задача не найдена")
+	logger.Printf("Задача #%d была удалена\n", id)
+	t1.Tasks = append(t1.Tasks[:index], t1.Tasks[index+1:]...)
+	fmt.Printf("Задача #%d была удалена\n", id)
 }
 
 func initLogger() *os.File {
@@ -178,57 +187,67 @@ func main() {
 		t1, err := loadTasks()
 		if err != nil {
 			fmt.Printf("Ошибка: loadTasks: %v\n", err.Error())
-			logger.Fatalf("Ошибка: loadTasks: %v\n", err.Error())
+			logger.Printf("Ошибка: loadTasks: %v\n", err.Error())
+			return
 		}
 		listTasks(t1)
 	case "add":
 		addCmd.Parse(os.Args[2:])
 		content := strings.Join(addCmd.Args(), " ")
 		if content == "" {
-			fmt.Println("Ошибка: укажите тест задачи")
-			logger.Fatalf("Не указан текст задачи")
+			fmt.Println("Ошибка: укажите текст задачи")
+			logger.Printf("Ошибка: не указан текст задачи")
+			return
 		}
 		t1, err := loadTasks()
 		if err != nil {
 			fmt.Printf("Ошибка: loadTasks: %v\n", err)
-			logger.Fatalf("Ошибка: loadTasks: %v\n", err)
+			logger.Printf("Ошибка: loadTasks: %v\n", err)
+			return
 		}
 		addTask(t1, content)
 		if err := saveTask(t1); err != nil {
 			fmt.Printf("Ошибка: saveTask: %v\n", err)
 			logger.Printf("Ошибка: saveTask: %v\n", err)
+			return
 		}
 	case "toggle":
 		toggleCmd.Parse(os.Args[2:])
 		if len(toggleCmd.Args()) == 0 {
 			fmt.Println("Укажите id задачи")
 			logger.Println("Ошибка: не указан id задачи")
+			return
 		}
 		t1, err := loadTasks()
 		if err != nil {
 			fmt.Printf("Ошибка: loadTasks: %v\n", err)
 			logger.Printf("Ошибка: loadTasks: %v\n", err)
+			return
 		}
 		toggleTask(t1, toggleCmd.Args()[0])
 		if err := saveTask(t1); err != nil {
 			fmt.Printf("Ошибка: saveTask: %v\n", err)
 			logger.Printf("Ошибка: saveTask: %v\n", err)
+			return
 		}
 	case "delete":
 		deleteCmd.Parse(os.Args[2:])
 		if len(deleteCmd.Args()) == 0 {
 			fmt.Println("Укажите id задачи")
 			logger.Println("Ошибка: не указан id задачи")
+			return
 		}
 		t1, err := loadTasks()
 		if err != nil {
 			fmt.Printf("Ошибка: loadTasks: %v\n", err)
 			logger.Printf("Ошибка: loadTasks: %v\n", err)
+			return
 		}
 		deleteTask(t1, deleteCmd.Args()[0])
 		if err := saveTask(t1); err != nil {
 			fmt.Printf("Ошибка: saveTask: %v\n", err)
 			logger.Printf("Ошибка: saveTask: %v\n", err)
+			return
 		}
 	default:
 		fmt.Println("Неизвестная команда")
