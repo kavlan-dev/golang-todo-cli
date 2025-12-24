@@ -8,12 +8,15 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Task struct {
-	Id      int    `json:"id"`
-	Content string `json:"content"`
-	Done    bool   `json:"done"`
+	Id          int    `json:"id"`
+	Content     string `json:"content"`
+	Done        bool   `json:"done"`
+	CreatedAt   string `json:"created_at"`
+	CompletedAt string `json:"completed_at,omitempty"`
 }
 
 type TodoList struct {
@@ -79,7 +82,11 @@ func listTasks(t1 *TodoList) {
 		if task.Done {
 			status = "x"
 		}
-		fmt.Printf("%d [%s], %s\n", task.Id, status, task.Content)
+		fmt.Printf("%d [%s], %s (создана: %s)", task.Id, status, task.Content, task.CreatedAt)
+		if task.Done && task.CompletedAt != "" {
+			fmt.Printf(", выполнена: %s", task.CompletedAt)
+		}
+		fmt.Println()
 	}
 }
 
@@ -125,9 +132,10 @@ func addTask(t1 *TodoList, content string) {
 	}
 
 	task := Task{
-		Id:      t1.NextId,
-		Content: content,
-		Done:    false,
+		Id:        t1.NextId,
+		Content:   content,
+		Done:      false,
+		CreatedAt: time.Now().Format("2006-01-02 15:04:05"),
 	}
 	t1.Tasks = append(t1.Tasks, task)
 	t1.NextId++
@@ -150,9 +158,11 @@ func toggleTask(t1 *TodoList, strId string) {
 	}
 
 	t1.Tasks[index].Done = !t1.Tasks[index].Done
-	status := "выполнено"
-	if !t1.Tasks[index].Done {
-		status = "не выполнено"
+	t1.Tasks[index].CompletedAt = ""
+	status := "не выполнено"
+	if t1.Tasks[index].Done {
+		status = "выполнено"
+		t1.Tasks[index].CompletedAt = time.Now().Format("2006-01-02 15:04:05")
 	}
 	logger.Printf("Задача #%d отмечена как %s\n", id, status)
 	fmt.Printf("Задача #%d отмечена как %s\n", id, status)
@@ -214,8 +224,12 @@ func clearAllTasks(t1 *TodoList) {
 }
 
 func completeAllTasks(t1 *TodoList) {
+	currentTime := time.Now().Format("2006-01-02 15:04:05")
 	for i := range t1.Tasks {
-		t1.Tasks[i].Done = true
+		if !t1.Tasks[i].Done {
+			t1.Tasks[i].Done = true
+			t1.Tasks[i].CompletedAt = currentTime
+		}
 	}
 	logger.Println("Все задачи отмечены как выполненные")
 	fmt.Println("Все задачи отмечены как выполненные")
