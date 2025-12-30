@@ -1,403 +1,277 @@
-// Package main реализует CLI приложение для управления задачами (todo list)
-// с поддержкой добавления, редактирования, удаления и отслеживания статуса задач.
 package main
 
 import (
-	"encoding/json" // Для работы с JSON файлами
-	"flag"          // Для парсинга аргументов командной строки
-	"fmt"           // Для форматированного вывода
-	"os"            // Для работы с файловой системой
-	"strconv"       // Для конвертации строк в числа
-	"strings"       // Для работы со строками
-	"time"          // Для работы с временем
+	"encoding/json"
+	"flag"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"time"
 )
 
-// Task представляет собой отдельную задачу в списке дел.
-// Содержит всю необходимую информацию о задаче, включая статус и временные метки.
+// Task представляет собой отдельную задачу
 type Task struct {
 	Id          int    `json:"id"`                     // Уникальный идентификатор задачи
-	Content     string `json:"content"`                // Текстовое описание задачи
-	Done        bool   `json:"done"`                   // Статус выполнения задачи
-	CreatedAt   string `json:"created_at"`             // Время создания задачи (формат: "YYYY-MM-DD HH:MM:SS")
-	CompletedAt string `json:"completed_at,omitempty"` // Время выполнения задачи (пусто, если задача не выполнена)
+	Content     string `json:"content"`                // Текст задачи
+	Done        bool   `json:"done"`                   // Статус выполнения
+	CreatedAt   string `json:"created_at"`             // Дата и время создания
+	CompletedAt string `json:"completed_at,omitempty"` // Дата и время завершения (если выполнена)
 }
 
-// TodoList представляет собой полный список задач.
-// Используется для хранения всех задач и управления их идентификаторами.
+// TodoList содержит список всех задач и информацию о следующем доступном ID
 type TodoList struct {
-	Tasks  []Task `json:"tasks"`   // Список всех задач
-	NextId int    `json:"next_id"` // Следующий доступный ID для новой задачи (автоинкремент)
+	Tasks  []Task `json:"tasks"`   // Список задач
+	NextId int    `json:"next_id"` // Следующий доступный ID для новой задачи
 }
 
-// Константы приложения
-const maxTaskLength = 200      // Максимально допустимая длина текста задачи в символах
-const tasksPath = "tasks.json" // Путь к файлу для хранения задач в формате JSON
+const maxTaskLength = 200      // Максимальная длина текста задачи в символах
+const tasksPath = "tasks.json" // Путь к файлу для хранения задач
 
-// loadTasks загружает список задач из JSON файла.
-// Если файл не существует, создается новый пустой список задач.
-// Возвращает указатель на TodoList и ошибку (если возникла).
+// loadTasks загружает список задач из файла
+// Если файл не существует, создается новый пустой список
 func loadTasks() (*TodoList, error) {
 	data, err := os.ReadFile(tasksPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// Если файл не существует, возвращаем новый пустой список с NextId = 1
 			return &TodoList{NextId: 1}, nil
 		}
+
 		return nil, err
 	}
 
-	var t1 TodoList
-	if err := json.Unmarshal(data, &t1); err != nil {
+	var tl TodoList
+	if err := json.Unmarshal(data, &tl); err != nil {
 		return nil, err
 	}
 
-	return &t1, nil
+	return &tl, nil
 }
 
-// saveTask сохраняет текущий список задач в JSON файл.
-// Использует форматированный вывод для удобства чтения.
-// Возвращает ошибку, если сохранение не удалось.
-func saveTask(t1 *TodoList) error {
-	// Маршалинг с отступами для удобочитаемости
-	data, err := json.MarshalIndent(t1, "", "  ")
+// saveTask сохраняет текущий список задач в файл
+func saveTask(tl *TodoList) error {
+	data, err := json.MarshalIndent(tl, "", "  ")
 	if err != nil {
 		return err
 	}
 
-	// Сохранение в файл с правами 0644 (чтение/запись для владельца, только чтение для остальных)
 	return os.WriteFile(tasksPath, data, 0644)
 }
 
-// listTasks отображает список всех задач в консоли.
-// Для каждой задачи показывает ID, статус, текст и временные метки.
-// Если список пуст, выводит соответствующее сообщение.
-func listTasks(t1 *TodoList) {
-	if len(t1.Tasks) == 0 {
-		fmt.Println("Список задач пуст")
-		return
-	}
-	fmt.Println("Список задач:")
-	for _, task := range t1.Tasks {
-		// Определяем символ статуса: "x" для выполненных, " " для невыполненных
-		status := " "
-		if task.Done {
-			status = "x"
-		}
-		// Выводим информацию о задаче с временем создания
-		fmt.Printf("%d [%s], %s (создана: %s)", task.Id, status, task.Content, task.CreatedAt)
-		// Если задача выполнена, добавляем время выполнения
-		if task.Done && task.CompletedAt != "" {
-			fmt.Printf(", выполнена: %s", task.CompletedAt)
-		}
-		fmt.Println()
-	}
-}
-
-// parseTaskId парсит строковый ID задачи в целое число.
-// Возвращает ID и булево значение, указывающее на успех парсинга.
-// Используется для валидации пользовательского ввода.
+// parseTaskId преобразует строковый ID в числовой и проверяет его корректность
 func parseTaskId(strId string) (int, bool) {
 	id, err := strconv.Atoi(strId)
 	if err != nil {
 		fmt.Println("Ошибка: не верный id")
 		return 0, false
 	}
+
 	return id, true
 }
 
-// findTaskIndex ищет задачу по ID и возвращает её индекс в списке.
-// Если задача не найдена, возвращает -1.
-// Используется во многих функциях для поиска задачи перед её обработкой.
-func findTaskIndex(t1 *TodoList, id int) int {
-	for i := range t1.Tasks {
-		if t1.Tasks[i].Id == id {
+// findTaskIndex находит индекс задачи по её ID
+// Возвращает -1, если задача не найдена
+func findTaskIndex(tl *TodoList, id int) int {
+	for i := range tl.Tasks {
+		if tl.Tasks[i].Id == id {
 			return i
 		}
 	}
+
 	return -1
 }
 
-// isDuplicateTask проверяет, существует ли уже задача с таким же текстом.
-// Сравнение нечувствительно к регистру (использует strings.EqualFold).
-// Возвращает true, если дубликат найден, false - если нет.
-// Используется при добавлении и редактировании задач для предотвращения дубликатов.
-func isDuplicateTask(t1 *TodoList, content string) bool {
-	for _, task := range t1.Tasks {
-		if strings.EqualFold(task.Content, content) {
-			return true
+// validateTask проверяет корректность задачи перед добавлением или редактированием
+func validateTask(tl *TodoList, task Task) error {
+	if len(task.Content) > maxTaskLength {
+		return fmt.Errorf("Ошибка: текст задачи не должен превышать %d символов\n", maxTaskLength)
+	}
+
+	if strings.TrimSpace(task.Content) == "" {
+		return fmt.Errorf("Ошибка: новый текст задачи не может быть пустым")
+	}
+
+	for _, t := range tl.Tasks {
+		if strings.EqualFold(t.Content, task.Content) {
+			return fmt.Errorf("Ошибка: задача с таким заголовком уже существует")
 		}
 	}
-	return false
+
+	return nil
 }
 
-// addTask добавляет новую задачу в список.
-// Выполняет валидацию: проверка на дубликаты и максимальную длину.
-// Устанавливает текущее время в CreatedAt и статус Done = false.
-// После добавления увеличивает NextId для следующей задачи.
-func addTask(t1 *TodoList, content string) {
-	// Проверка на дубликаты
-	if isDuplicateTask(t1, content) {
-		fmt.Println("Ошибка: задача с таким текстом уже существует")
+// listTasks выводит список всех задач с их статусами
+func listTasks(tl *TodoList) {
+	if len(tl.Tasks) == 0 {
+		fmt.Println("Список задач пуст")
 		return
 	}
 
-	// Проверка максимальной длины
-	if len(content) > maxTaskLength {
-		fmt.Printf("Ошибка: текст задачи не должен превышать %d символов\n", maxTaskLength)
-		return
-	}
+	fmt.Println("Список задач:")
+	for _, task := range tl.Tasks {
+		status := " "
+		if task.Done {
+			status = "x"
+		}
 
-	// Создание новой задачи
+		fmt.Printf("%d [%s], %s (создана: %s)", task.Id, status, task.Content, task.CreatedAt)
+		if task.Done && task.CompletedAt != "" {
+			fmt.Printf(", выполнена: %s", task.CompletedAt)
+		}
+
+		fmt.Println()
+	}
+}
+
+// addTask добавляет новую задачу в список
+func addTask(tl *TodoList, content string) {
 	task := Task{
-		Id:        t1.NextId,
+		Id:        tl.NextId,
 		Content:   content,
 		Done:      false,
-		CreatedAt: time.Now().Format("2006-01-02 15:04:05"), // Текущее время
+		CreatedAt: time.Now().Format("2006-01-02 15:04:05"),
 	}
-	t1.Tasks = append(t1.Tasks, task)
-	t1.NextId++ // Увеличение счетчика для следующей задачи
+
+	err := validateTask(tl, task)
+	if err != nil {
+		fmt.Println(err.Error())
+		return
+	}
+
+	tl.Tasks = append(tl.Tasks, task)
+	tl.NextId++
 	fmt.Printf("Добавлена задача %d: %s\n", task.Id, content)
 }
 
-// toggleTask переключает статус выполнения задачи (выполнено/не выполнено).
-// Если задача отмечается как выполненная, устанавливается текущее время в CompletedAt.
-// Если задача отмечается как невыполненная, CompletedAt очищается.
-// Использует parseTaskId и findTaskIndex для валидации и поиска задачи.
-func toggleTask(t1 *TodoList, strId string) {
+// toggleTask изменяет статус выполнения задачи (выполнено/не выполнено)
+func toggleTask(tl *TodoList, strId string) {
 	id, ok := parseTaskId(strId)
 	if !ok {
 		return
 	}
 
-	index := findTaskIndex(t1, id)
+	index := findTaskIndex(tl, id)
 	if index == -1 {
 		fmt.Println("Задача не найдена")
 		return
 	}
 
-	// Переключение статуса
-	t1.Tasks[index].Done = !t1.Tasks[index].Done
-	t1.Tasks[index].CompletedAt = ""
+	tl.Tasks[index].Done = !tl.Tasks[index].Done
+	tl.Tasks[index].CompletedAt = ""
 	status := "не выполнено"
-	if t1.Tasks[index].Done {
+	if tl.Tasks[index].Done {
 		status = "выполнено"
-		t1.Tasks[index].CompletedAt = time.Now().Format("2006-01-02 15:04:05") // Устанавливаем время выполнения
+		tl.Tasks[index].CompletedAt = time.Now().Format("2006-01-02 15:04:05")
 	}
+
 	fmt.Printf("Задача #%d отмечена как %s\n", id, status)
 }
 
-// editTask редактирует текст существующей задачи.
-// Выполняет валидацию: проверка на пустой текст и дубликаты.
-// Сохраняет оригинальные даты создания и выполнения.
-// Использует parseTaskId и findTaskIndex для валидации и поиска задачи.
-func editTask(t1 *TodoList, strId string, newContent string) {
+// deleteTask удаляет задачу из списка по её ID
+func deleteTask(tl *TodoList, strId string) {
 	id, ok := parseTaskId(strId)
 	if !ok {
 		return
 	}
 
-	index := findTaskIndex(t1, id)
+	index := findTaskIndex(tl, id)
 	if index == -1 {
 		fmt.Println("Задача не найдена")
 		return
 	}
 
-	// Проверка на пустой текст
-	if newContent == "" {
-		fmt.Println("Ошибка: новый текст задачи не может быть пустым")
-		return
-	}
-
-	// Проверка на дубликаты
-	if isDuplicateTask(t1, newContent) {
-		fmt.Println("Ошибка: задача с таким текстом уже существует")
-		return
-	}
-
-	// Редактирование задачи (даты сохраняются автоматически)
-	t1.Tasks[index].Content = newContent
-	fmt.Printf("Задача #%d отредактирована: %s\n", id, newContent)
-}
-
-// deleteTask удаляет задачу из списка по её ID.
-// Использует parseTaskId и findTaskIndex для валидации и поиска задачи.
-// Удаление выполняется с помощью среза (append), что эффективно для небольших списков.
-func deleteTask(t1 *TodoList, strId string) {
-	id, ok := parseTaskId(strId)
-	if !ok {
-		return
-	}
-
-	index := findTaskIndex(t1, id)
-	if index == -1 {
-		fmt.Println("Задача не найдена")
-		return
-	}
-	// Удаление элемента из среза: [элементы до индекса] + [элементы после индекса]
-	t1.Tasks = append(t1.Tasks[:index], t1.Tasks[index+1:]...)
+	tl.Tasks = append(tl.Tasks[:index], tl.Tasks[index+1:]...)
 	fmt.Printf("Задача #%d была удалена\n", id)
 }
 
-// clearAllTasks очищает все задачи и сбрасывает счетчик ID.
-// Устанавливает пустой срез задач и NextId = 1 для начала с чистого листа.
-// Полезно для полного сброса списка задач.
-func clearAllTasks(t1 *TodoList) {
-	t1.Tasks = []Task{} // Очистка списка задач
-	t1.NextId = 1       // Сброс счетчика ID
+// clearAllTasks удаляет все задачи и сбрасывает счётчик ID
+func clearAllTasks(tl *TodoList) {
+	tl.Tasks = []Task{}
+	tl.NextId = 1
 	fmt.Println("Все задачи очищены")
 }
 
-// completeAllTasks отмечает все невыполненные задачи как выполненные.
-// Устанавливает текущее время в CompletedAt для всех задач, которые еще не выполнены.
-// Полезно для массового завершения задач.
-func completeAllTasks(t1 *TodoList) {
-	currentTime := time.Now().Format("2006-01-02 15:04:05") // Текущее время для всех задач
-	for i := range t1.Tasks {
-		if !t1.Tasks[i].Done {
-			t1.Tasks[i].Done = true
-			t1.Tasks[i].CompletedAt = currentTime // Устанавливаем время выполнения
+// completeAllTasks отмечает все задачи как выполненные
+func completeAllTasks(tl *TodoList) {
+	currentTime := time.Now().Format("2006-01-02 15:04:05")
+	for i := range tl.Tasks {
+		if !tl.Tasks[i].Done {
+			tl.Tasks[i].Done = true
+			tl.Tasks[i].CompletedAt = currentTime
 		}
 	}
+
 	fmt.Println("Все задачи отмечены как выполненные")
 }
 
-// main - основная функция приложения, точка входа.
-// Поддерживает следующие команды: list, add, toggle, delete, edit, clear-all, complete-all.
-// Использует паттерн "flag" для парсинга аргументов и обработки ошибок.
 func main() {
-	// Инициализация флагов для парсинга аргументов команд
-	addCmd := flag.NewFlagSet("add", flag.ExitOnError)
-	toggleCmd := flag.NewFlagSet("toggle", flag.ExitOnError)
-	deleteCmd := flag.NewFlagSet("delete", flag.ExitOnError)
-	editCmd := flag.NewFlagSet("edit", flag.ExitOnError)
+	listFlag := flag.Bool("list", false, "List all tasks")
+	addFlag := flag.String("add", "", "Add a new task")
+	toggleFlag := flag.String("toggle", "", "Toggle task status (provide task ID)")
+	deleteFlag := flag.String("delete", "", "Delete a task (provide task ID)")
+	clearFlag := flag.Bool("clear", false, "Clear all tasks")
+	completeAllFlag := flag.Bool("complete-all", false, "Mark all tasks as complete")
 
-	// Проверка минимального количества аргументов
-	if len(os.Args) < 2 {
-		// Вывод справки при недостаточном количестве аргументов
-		fmt.Println("Использование: todo [list|add|toggle|delete|edit|clear-all|complete-all] [аргументы]")
-		fmt.Println("  todo list         - показать все задачи")
-		fmt.Println("  todo add \"текст\"  - добавить задачу")
-		fmt.Println("  todo toggle 5     - поменять статус задачи #5")
-		fmt.Println("  todo delete 5     - удалить задачу #5")
-		fmt.Println("  todo edit 5 \"новый текст\" - редактировать задачу #5")
-		fmt.Println("  todo clear-all    - очистить все задачи")
-		fmt.Println("  todo complete-all - отметить все задачи как выполненные")
+	flag.Parse()
+
+	tl, err := loadTasks()
+	if err != nil {
+		fmt.Printf("Ошибка загрузки задач: %v\n", err)
 		return
 	}
 
-	// Основной switch по командам
-	switch os.Args[1] {
-	case "list":
-		// Загрузка и отображение списка задач
-		t1, err := loadTasks()
-		if err != nil {
-			fmt.Printf("Ошибка: loadTasks: %v\n", err.Error())
-			return
-		}
-		listTasks(t1)
-
-	case "add":
-		// Парсинг аргументов и добавление новой задачи
-		addCmd.Parse(os.Args[2:])
-		content := strings.Join(addCmd.Args(), " ")
-		if content == "" {
-			fmt.Println("Ошибка: укажите текст задачи")
-			return
-		}
-		t1, err := loadTasks()
-		if err != nil {
-			fmt.Printf("Ошибка: loadTasks: %v\n", err)
-			return
-		}
-		addTask(t1, content)
-		if err := saveTask(t1); err != nil {
-			fmt.Printf("Ошибка: saveTask: %v\n", err)
-			return
-		}
-
-	case "toggle":
-		// Парсинг аргументов и переключение статуса задачи
-		toggleCmd.Parse(os.Args[2:])
-		if len(toggleCmd.Args()) == 0 {
-			fmt.Println("Укажите id задачи")
-			return
-		}
-		t1, err := loadTasks()
-		if err != nil {
-			fmt.Printf("Ошибка: loadTasks: %v\n", err)
-			return
-		}
-		toggleTask(t1, toggleCmd.Args()[0])
-		if err := saveTask(t1); err != nil {
-			fmt.Printf("Ошибка: saveTask: %v\n", err)
-			return
-		}
-
-	case "delete":
-		// Парсинг аргументов и удаление задачи
-		deleteCmd.Parse(os.Args[2:])
-		if len(deleteCmd.Args()) == 0 {
-			fmt.Println("Укажите id задачи")
-			return
-		}
-		t1, err := loadTasks()
-		if err != nil {
-			fmt.Printf("Ошибка: loadTasks: %v\n", err)
-			return
-		}
-		deleteTask(t1, deleteCmd.Args()[0])
-		if err := saveTask(t1); err != nil {
-			fmt.Printf("Ошибка: saveTask: %v\n", err)
-			return
-		}
-
-	case "clear-all":
-		// Очистка всех задач
-		t1, err := loadTasks()
-		if err != nil {
-			fmt.Printf("Ошибка: loadTasks: %v\n", err)
-			return
-		}
-		clearAllTasks(t1)
-		if err := saveTask(t1); err != nil {
-			fmt.Printf("Ошибка: saveTask: %v\n", err)
-			return
-		}
-
-	case "edit":
-		// Парсинг аргументов и редактирование задачи
-		editCmd.Parse(os.Args[2:])
-		if len(editCmd.Args()) < 2 {
-			fmt.Println("Укажите id задачи и новый текст")
-			return
-		}
-		t1, err := loadTasks()
-		if err != nil {
-			fmt.Printf("Ошибка: loadTasks: %v\n", err)
-			return
-		}
-		newContent := strings.Join(editCmd.Args()[1:], " ")
-		editTask(t1, editCmd.Args()[0], newContent)
-		if err := saveTask(t1); err != nil {
-			fmt.Printf("Ошибка: saveTask: %v\n", err)
-			return
-		}
-
-	case "complete-all":
-		// Отметка всех задач как выполненных
-		t1, err := loadTasks()
-		if err != nil {
-			fmt.Printf("Ошибка: loadTasks: %v\n", err)
-			return
-		}
-		completeAllTasks(t1)
-		if err := saveTask(t1); err != nil {
-			fmt.Printf("Ошибка: saveTask: %v\n", err)
-			return
-		}
-
-	default:
-		// Обработка неизвестных команд
-		fmt.Println("Неизвестная команда")
+	if *listFlag {
+		listTasks(tl)
+		return
 	}
+
+	if *addFlag != "" {
+		content := *addFlag
+		addTask(tl, content)
+		if err := saveTask(tl); err != nil {
+			fmt.Printf("Ошибка сохранения задач: %v\n", err.Error())
+			return
+		}
+		return
+	}
+
+	if *toggleFlag != "" {
+		id := *toggleFlag
+		toggleTask(tl, id)
+		if err := saveTask(tl); err != nil {
+			fmt.Printf("Ошибка сохранения задач: %v\n", err.Error())
+			return
+		}
+		return
+	}
+
+	if *deleteFlag != "" {
+		id := *deleteFlag
+		deleteTask(tl, id)
+		if err := saveTask(tl); err != nil {
+			fmt.Printf("Ошибка сохранения задач: %v\n", err)
+			return
+		}
+		return
+	}
+
+	if *clearFlag {
+		clearAllTasks(tl)
+		if err := saveTask(tl); err != nil {
+			fmt.Printf("Ошибка сохранения задач: %v\n", err)
+			return
+		}
+		return
+	}
+
+	if *completeAllFlag {
+		completeAllTasks(tl)
+		if err := saveTask(tl); err != nil {
+			fmt.Printf("Ошибка сохранения задач: %v\n", err)
+			return
+		}
+		return
+	}
+
+	flag.Usage()
 }
