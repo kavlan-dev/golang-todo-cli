@@ -6,7 +6,6 @@ import (
 	"encoding/json" // Для работы с JSON файлами
 	"flag"          // Для парсинга аргументов командной строки
 	"fmt"           // Для форматированного вывода
-	"log"           // Для логирования
 	"os"            // Для работы с файловой системой
 	"strconv"       // Для конвертации строк в числа
 	"strings"       // Для работы со строками
@@ -34,32 +33,21 @@ type TodoList struct {
 const maxTaskLength = 200      // Максимально допустимая длина текста задачи в символах
 const tasksPath = "tasks.json" // Путь к файлу для хранения задач в формате JSON
 
-// Глобальные переменные
-var logger *log.Logger // Логгер для записи событий и ошибок в файл app.log
-
 // loadTasks загружает список задач из JSON файла.
 // Если файл не существует, создается новый пустой список задач.
 // Возвращает указатель на TodoList и ошибку (если возникла).
 func loadTasks() (*TodoList, error) {
-	logger.Println("Получение всех задач")
-
 	data, err := os.ReadFile(tasksPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			logger.Println("Задачи не найдены")
-
 			// Если файл не существует, возвращаем новый пустой список с NextId = 1
 			return &TodoList{NextId: 1}, nil
 		}
-		logger.Println(err.Error())
-
 		return nil, err
 	}
 
 	var t1 TodoList
 	if err := json.Unmarshal(data, &t1); err != nil {
-		logger.Println(err.Error())
-
 		return nil, err
 	}
 
@@ -70,13 +58,9 @@ func loadTasks() (*TodoList, error) {
 // Использует форматированный вывод для удобства чтения.
 // Возвращает ошибку, если сохранение не удалось.
 func saveTask(t1 *TodoList) error {
-	logger.Println("Сохранение задачи")
-
 	// Маршалинг с отступами для удобочитаемости
 	data, err := json.MarshalIndent(t1, "", "  ")
 	if err != nil {
-		logger.Print(err.Error())
-
 		return err
 	}
 
@@ -89,13 +73,9 @@ func saveTask(t1 *TodoList) error {
 // Если список пуст, выводит соответствующее сообщение.
 func listTasks(t1 *TodoList) {
 	if len(t1.Tasks) == 0 {
-		logger.Println("Список задач пуст")
-
 		fmt.Println("Список задач пуст")
 		return
 	}
-	logger.Println("Выведен список всех задач")
-
 	fmt.Println("Список задач:")
 	for _, task := range t1.Tasks {
 		// Определяем символ статуса: "x" для выполненных, " " для невыполненных
@@ -119,7 +99,6 @@ func listTasks(t1 *TodoList) {
 func parseTaskId(strId string) (int, bool) {
 	id, err := strconv.Atoi(strId)
 	if err != nil {
-		logger.Println("Не верный id")
 		fmt.Println("Ошибка: не верный id")
 		return 0, false
 	}
@@ -159,14 +138,12 @@ func addTask(t1 *TodoList, content string) {
 	// Проверка на дубликаты
 	if isDuplicateTask(t1, content) {
 		fmt.Println("Ошибка: задача с таким текстом уже существует")
-		logger.Printf("Ошибка: попытка добавить дубликат задачи: %s\n", content)
 		return
 	}
 
 	// Проверка максимальной длины
 	if len(content) > maxTaskLength {
 		fmt.Printf("Ошибка: текст задачи не должен превышать %d символов\n", maxTaskLength)
-		logger.Printf("Ошибка: текст задачи превышает лимит в %d символов\n", maxTaskLength)
 		return
 	}
 
@@ -179,8 +156,6 @@ func addTask(t1 *TodoList, content string) {
 	}
 	t1.Tasks = append(t1.Tasks, task)
 	t1.NextId++ // Увеличение счетчика для следующей задачи
-
-	logger.Printf("Добавлена задача %d: %s\n", task.Id, content)
 	fmt.Printf("Добавлена задача %d: %s\n", task.Id, content)
 }
 
@@ -196,7 +171,6 @@ func toggleTask(t1 *TodoList, strId string) {
 
 	index := findTaskIndex(t1, id)
 	if index == -1 {
-		logger.Printf("Задача #%d не найдена\n", id)
 		fmt.Println("Задача не найдена")
 		return
 	}
@@ -209,8 +183,6 @@ func toggleTask(t1 *TodoList, strId string) {
 		status = "выполнено"
 		t1.Tasks[index].CompletedAt = time.Now().Format("2006-01-02 15:04:05") // Устанавливаем время выполнения
 	}
-
-	logger.Printf("Задача #%d отмечена как %s\n", id, status)
 	fmt.Printf("Задача #%d отмечена как %s\n", id, status)
 }
 
@@ -226,7 +198,6 @@ func editTask(t1 *TodoList, strId string, newContent string) {
 
 	index := findTaskIndex(t1, id)
 	if index == -1 {
-		logger.Printf("Задача #%d не найдена\n", id)
 		fmt.Println("Задача не найдена")
 		return
 	}
@@ -234,21 +205,17 @@ func editTask(t1 *TodoList, strId string, newContent string) {
 	// Проверка на пустой текст
 	if newContent == "" {
 		fmt.Println("Ошибка: новый текст задачи не может быть пустым")
-		logger.Printf("Ошибка: новый текст задачи #%d пустой\n", id)
 		return
 	}
 
 	// Проверка на дубликаты
 	if isDuplicateTask(t1, newContent) {
 		fmt.Println("Ошибка: задача с таким текстом уже существует")
-		logger.Printf("Ошибка: попытка добавить дубликат задачи: %s\n", newContent)
 		return
 	}
 
 	// Редактирование задачи (даты сохраняются автоматически)
 	t1.Tasks[index].Content = newContent
-
-	logger.Printf("Задача #%d отредактирована: %s\n", id, newContent)
 	fmt.Printf("Задача #%d отредактирована: %s\n", id, newContent)
 }
 
@@ -263,12 +230,9 @@ func deleteTask(t1 *TodoList, strId string) {
 
 	index := findTaskIndex(t1, id)
 	if index == -1 {
-		logger.Printf("Задача #%d не найдена\n", id)
 		fmt.Println("Задача не найдена")
 		return
 	}
-
-	logger.Printf("Задача #%d была удалена\n", id)
 	// Удаление элемента из среза: [элементы до индекса] + [элементы после индекса]
 	t1.Tasks = append(t1.Tasks[:index], t1.Tasks[index+1:]...)
 	fmt.Printf("Задача #%d была удалена\n", id)
@@ -280,7 +244,6 @@ func deleteTask(t1 *TodoList, strId string) {
 func clearAllTasks(t1 *TodoList) {
 	t1.Tasks = []Task{} // Очистка списка задач
 	t1.NextId = 1       // Сброс счетчика ID
-	logger.Println("Все задачи очищены")
 	fmt.Println("Все задачи очищены")
 }
 
@@ -295,38 +258,13 @@ func completeAllTasks(t1 *TodoList) {
 			t1.Tasks[i].CompletedAt = currentTime // Устанавливаем время выполнения
 		}
 	}
-	logger.Println("Все задачи отмечены как выполненные")
 	fmt.Println("Все задачи отмечены как выполненные")
 }
 
-// initLogger инициализирует логгер для записи событий в файл.
-// Создает или открывает файл app.log с флагами:
-// - O_CREATE: создать файл, если не существует
-// - O_WRONLY: открыть только для записи
-// - O_APPEND: добавлять записи в конец файла
-// Устанавливает префикс "INFO: " и формат с датой, временем и именем файла.
-func initLogger() *os.File {
-	const logPath = "app.log" // Путь к лог-файлу
-	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("Ошибка: OpenFile: %v\n", err)
-	}
-
-	// Настройка логгера с префиксом и флагами форматирования
-	logger = log.New(file, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
-	return file
-}
-
 // main - основная функция приложения, точка входа.
-// Инициализирует логгер, парсит аргументы командной строки и выполняет соответствующие действия.
 // Поддерживает следующие команды: list, add, toggle, delete, edit, clear-all, complete-all.
 // Использует паттерн "flag" для парсинга аргументов и обработки ошибок.
 func main() {
-	// Инициализация логгера (открытие файла и настройка)
-	file := initLogger()
-	// defer обеспечивает закрытие файла при выходе из функции (даже при панике)
-	defer file.Close()
-
 	// Инициализация флагов для парсинга аргументов команд
 	addCmd := flag.NewFlagSet("add", flag.ExitOnError)
 	toggleCmd := flag.NewFlagSet("toggle", flag.ExitOnError)
@@ -354,7 +292,6 @@ func main() {
 		t1, err := loadTasks()
 		if err != nil {
 			fmt.Printf("Ошибка: loadTasks: %v\n", err.Error())
-			logger.Printf("Ошибка: loadTasks: %v\n", err.Error())
 			return
 		}
 		listTasks(t1)
@@ -365,19 +302,16 @@ func main() {
 		content := strings.Join(addCmd.Args(), " ")
 		if content == "" {
 			fmt.Println("Ошибка: укажите текст задачи")
-			logger.Printf("Ошибка: не указан текст задачи")
 			return
 		}
 		t1, err := loadTasks()
 		if err != nil {
 			fmt.Printf("Ошибка: loadTasks: %v\n", err)
-			logger.Printf("Ошибка: loadTasks: %v\n", err)
 			return
 		}
 		addTask(t1, content)
 		if err := saveTask(t1); err != nil {
 			fmt.Printf("Ошибка: saveTask: %v\n", err)
-			logger.Printf("Ошибка: saveTask: %v\n", err)
 			return
 		}
 
@@ -386,19 +320,16 @@ func main() {
 		toggleCmd.Parse(os.Args[2:])
 		if len(toggleCmd.Args()) == 0 {
 			fmt.Println("Укажите id задачи")
-			logger.Println("Ошибка: не указан id задачи")
 			return
 		}
 		t1, err := loadTasks()
 		if err != nil {
 			fmt.Printf("Ошибка: loadTasks: %v\n", err)
-			logger.Printf("Ошибка: loadTasks: %v\n", err)
 			return
 		}
 		toggleTask(t1, toggleCmd.Args()[0])
 		if err := saveTask(t1); err != nil {
 			fmt.Printf("Ошибка: saveTask: %v\n", err)
-			logger.Printf("Ошибка: saveTask: %v\n", err)
 			return
 		}
 
@@ -407,19 +338,16 @@ func main() {
 		deleteCmd.Parse(os.Args[2:])
 		if len(deleteCmd.Args()) == 0 {
 			fmt.Println("Укажите id задачи")
-			logger.Println("Ошибка: не указан id задачи")
 			return
 		}
 		t1, err := loadTasks()
 		if err != nil {
 			fmt.Printf("Ошибка: loadTasks: %v\n", err)
-			logger.Printf("Ошибка: loadTasks: %v\n", err)
 			return
 		}
 		deleteTask(t1, deleteCmd.Args()[0])
 		if err := saveTask(t1); err != nil {
 			fmt.Printf("Ошибка: saveTask: %v\n", err)
-			logger.Printf("Ошибка: saveTask: %v\n", err)
 			return
 		}
 
@@ -428,13 +356,11 @@ func main() {
 		t1, err := loadTasks()
 		if err != nil {
 			fmt.Printf("Ошибка: loadTasks: %v\n", err)
-			logger.Printf("Ошибка: loadTasks: %v\n", err)
 			return
 		}
 		clearAllTasks(t1)
 		if err := saveTask(t1); err != nil {
 			fmt.Printf("Ошибка: saveTask: %v\n", err)
-			logger.Printf("Ошибка: saveTask: %v\n", err)
 			return
 		}
 
@@ -443,20 +369,17 @@ func main() {
 		editCmd.Parse(os.Args[2:])
 		if len(editCmd.Args()) < 2 {
 			fmt.Println("Укажите id задачи и новый текст")
-			logger.Println("Ошибка: не указан id задачи или новый текст")
 			return
 		}
 		t1, err := loadTasks()
 		if err != nil {
 			fmt.Printf("Ошибка: loadTasks: %v\n", err)
-			logger.Printf("Ошибка: loadTasks: %v\n", err)
 			return
 		}
 		newContent := strings.Join(editCmd.Args()[1:], " ")
 		editTask(t1, editCmd.Args()[0], newContent)
 		if err := saveTask(t1); err != nil {
 			fmt.Printf("Ошибка: saveTask: %v\n", err)
-			logger.Printf("Ошибка: saveTask: %v\n", err)
 			return
 		}
 
@@ -465,19 +388,16 @@ func main() {
 		t1, err := loadTasks()
 		if err != nil {
 			fmt.Printf("Ошибка: loadTasks: %v\n", err)
-			logger.Printf("Ошибка: loadTasks: %v\n", err)
 			return
 		}
 		completeAllTasks(t1)
 		if err := saveTask(t1); err != nil {
 			fmt.Printf("Ошибка: saveTask: %v\n", err)
-			logger.Printf("Ошибка: saveTask: %v\n", err)
 			return
 		}
 
 	default:
 		// Обработка неизвестных команд
 		fmt.Println("Неизвестная команда")
-		logger.Println("Введена не известная команда -", os.Args[1])
 	}
 }
