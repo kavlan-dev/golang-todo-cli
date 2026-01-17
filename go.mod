@@ -1,3 +1,3 @@
-module github.com/kavlan-dev/golang-todo-cli
+module go-todo-cli
 
-go 1.24.9
+go 1.25.5
